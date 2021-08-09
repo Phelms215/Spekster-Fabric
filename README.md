@@ -1,6 +1,5 @@
 # SpeksterFabric
-Spectator Mod for Fabric Servers, allows player to still take damage and if they die the person in spectator dies. 
-
+Spectator Mod for Fabric Servers. Creates a clone of the player, that spawns and atracts entities like a normal player. If that clone dies the player is teleported back and dies also. 
 
 **Commands**
 
