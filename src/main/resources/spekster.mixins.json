@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.networkglitch.spekster.mixin",
+  "compatibilityLevel": "JAVA_16",
+  "server": [
+    "BroadcastMessageMixin",
+    "PlayerLeaveMixin"
+  ],
+  "client": [
+  ],
+  "mixins": [
+    "TeleportMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

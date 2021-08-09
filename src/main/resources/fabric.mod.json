@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "spekster",
+  "version": "1.1.0",
+  "name": "Spekster",
+  "description": "Allow controlled spectator mode for any player, while still putting the player at risk",
+  "authors": [
+    "PHELMS"
+  ],
+  "contact": {
+    "website": "networkglitch.com"
+  },
+  "license": "MIT",
+  "icon": "assets/spekster/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "main": [
+      "com.networkglitch.spekster.Spekster"
+    ]
+  },
+  "mixins": [
+    "spekster.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.11.6",
+    "fabric": "*",
+    "minecraft": "1.17.1"
+  }
+}
