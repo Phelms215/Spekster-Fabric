@@ -28,7 +28,7 @@ public class SpecCommand {
 
                 // Player is in Spec mode
                 SpecDetails details = Spekster.Tracker.get(playerUUUID);
-                Spekster.DeactiveSpec(details, source.getServer(), source.getPlayer());
+                Spekster.DeactivateSpec(details, source.getServer(), source.getPlayer());
 
             } else {
                 // Register HashMap Entry

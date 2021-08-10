@@ -8,28 +8,43 @@ package com.networkglitch.spekster.carpet;
  */
 
 import com.mojang.authlib.GameProfile;
+import com.mojang.authlib.properties.Property;
 import com.networkglitch.spekster.Spekster;
+import com.networkglitch.spekster.datasets.SkinDetails;
 import net.minecraft.block.entity.SkullBlockEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.entity.player.HungerManager;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.network.MessageType;
 import net.minecraft.network.NetworkSide;
+import net.minecraft.network.packet.s2c.play.DeathMessageS2CPacket;
 import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
 import net.minecraft.network.packet.s2c.play.EntitySetHeadYawS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
+import net.minecraft.scoreboard.AbstractTeam;
+import net.minecraft.scoreboard.ScoreboardCriterion;
+import net.minecraft.scoreboard.ScoreboardPlayerScore;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerTask;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.stat.Stats;
+import net.minecraft.text.HoverEvent;
+import net.minecraft.text.LiteralText;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.UserCache;
+import net.minecraft.util.Util;
 import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.world.GameMode;
+import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
 
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 @SuppressWarnings("EntityConstructor")
@@ -38,7 +53,7 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     public Runnable fixStartingPosition = () -> {};
     public boolean isAShadow;
 
-    public static EntityPlayerMPFake createFake(String username, MinecraftServer server, double d0, double d1, double d2, double yaw, double pitch, RegistryKey<World> dimensionId, GameMode gamemode, boolean flying)
+    public static EntityPlayerMPFake createFake(String username, MinecraftServer server, double d0, double d1, double d2, double yaw, double pitch, RegistryKey<World> dimensionId, GameMode gamemode, boolean flying, UUID playerUUID)
     {
         //prolly half of that crap is not necessary, but it works
         ServerWorld worldIn = server.getWorld(dimensionId);
@@ -54,16 +69,27 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
         {
             gameprofile = new GameProfile(PlayerEntity.getOfflinePlayerUuid(username), username);
         }
+
+        // Grab the skin of the playerUUID and set the clone to, ya know look like them
+        SkinDetails playerSkin = Spekster.FetchSkin(playerUUID);
+        if(Spekster.isNotNull(playerSkin)) {
+            //TODO: Build a static grab for a default texture (config?)
+            gameprofile.getProperties().put("textures", new Property("textures", playerSkin.getProperties().getTexture(), playerSkin.getProperties().getSignature()));
+        }
+
         if (gameprofile.getProperties().containsKey("textures"))
         {
             AtomicReference<GameProfile> result = new AtomicReference<>();
             SkullBlockEntity.loadProperties(gameprofile, result::set);
             gameprofile = result.get();
         }
+
         EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, gameprofile, false);
         instance.fixStartingPosition = () -> instance.refreshPositionAndAngles(d0, d1, d2, (float) yaw, (float) pitch);
         server.getPlayerManager().onPlayerConnect(new NetworkManagerFake(NetworkSide.SERVERBOUND), instance);
-        instance.teleport(worldIn, d0, d1, d2, (float)yaw, (float)pitch);
+        instance.setWorld (worldIn);
+        instance.setPos(d0, d1, d2);
+        instance.setRotation((float)yaw, (float)pitch);
         instance.setHealth(20.0F);
         instance.unsetRemoved();
         instance.stepHeight = 0.6F;
@@ -73,6 +99,9 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
         instance.getServerWorld().getChunkManager().updatePosition(instance);
         instance.dataTracker.set(PLAYER_MODEL_PARTS, (byte) 0x7f); // show all model layers (incl. capes)
         instance.getAbilities().flying = flying;
+
+
+        instance.networkHandler.sendPacket(new PlayerListS2CPacket(PlayerListS2CPacket.Action.REMOVE_PLAYER, instance));
         return instance;
     }
 
@@ -94,7 +123,7 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
 
 
         server.getPlayerManager().sendToDimension(new EntitySetHeadYawS2CPacket(playerShadow, (byte) (player.headYaw * 256 / 360)), playerShadow.world.getRegistryKey());
-        server.getPlayerManager().sendToAll(new PlayerListS2CPacket(PlayerListS2CPacket.Action.ADD_PLAYER, playerShadow));
+        //  server.getPlayerManager().sendToAll(new PlayerListS2CPacket(PlayerListS2CPacket.Action.ADD_PLAYER, playerShadow));
         player.getServerWorld().getChunkManager().updatePosition(playerShadow);
         playerShadow.getAbilities().flying = player.getAbilities().flying;
         return playerShadow;
@@ -151,12 +180,37 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     @Override
     public void onDeath(DamageSource cause)
     {
-        shakeOff();
-        super.onDeath(cause);
-        setHealth(20);
-        this.hungerManager = new HungerManager();
-        kill();
+        // Capture the death and kill the dude who caused this mess.
         Spekster.onBotDeath(this.getUuid(), this.getServer());
+        server.getPlayerManager().remove(this);
+    }
+
+
+    private void superOnDeath(DamageSource source) {
+        this.networkHandler.sendPacket(new DeathMessageS2CPacket(this.getDamageTracker(), LiteralText.EMPTY));
+
+        this.dropShoulderEntities();
+
+        if (!this.isSpectator()) {
+            this.drop(source);
+        }
+
+        this.getScoreboard().forEachScore(ScoreboardCriterion.DEATH_COUNT, this.getEntityName(), ScoreboardPlayerScore::incrementScore);
+        LivingEntity livingEntity = this.getPrimeAdversary();
+        if (livingEntity != null) {
+            this.incrementStat(Stats.KILLED_BY.getOrCreateStat(livingEntity.getType()));
+            //livingEntity.updateKilledAdvancementCriterion(this, this.scoreAmount, source);
+            this.onKilledBy(livingEntity);
+        }
+
+        this.world.sendEntityStatus(this, (byte)3);
+        this.incrementStat(Stats.DEATHS);
+        this.resetStat(Stats.CUSTOM.getOrCreateStat(Stats.TIME_SINCE_DEATH));
+        this.resetStat(Stats.CUSTOM.getOrCreateStat(Stats.TIME_SINCE_REST));
+        this.extinguish();
+        this.setFrozenTicks(0);
+        this.setOnFire(false);
+        this.getDamageTracker().update();
     }
 
     @Override

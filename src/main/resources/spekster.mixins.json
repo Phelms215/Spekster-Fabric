@@ -4,13 +4,14 @@
   "package": "com.networkglitch.spekster.mixin",
   "compatibilityLevel": "JAVA_16",
   "server": [
-    "BroadcastMessageMixin",
-    "PlayerLeaveMixin"
+    "PlayerLeaveMixin",
+    "SpecPlayerDeathMixin",
+    "SpecPlayerJoinMixin",
+    "TeleportMixin"
   ],
   "client": [
   ],
   "mixins": [
-    "TeleportMixin"
   ],
   "injectors": {
     "defaultRequire": 1
