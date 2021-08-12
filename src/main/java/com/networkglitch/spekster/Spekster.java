@@ -11,6 +11,7 @@ import com.networkglitch.spekster.datasets.SpecDetails;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
@@ -46,9 +47,10 @@ public class Spekster implements ModInitializer {
     public static HashMap<UUID, UUID> BotPlayerLink = new HashMap<>();
 
 
+
     @Override
     public void onInitialize() {
-        log(Level.INFO, "Initializing mode, registering commands");
+        log(Level.INFO, "Initializing mod, registering commands");
         CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> {
             LiteralCommandNode<ServerCommandSource> SpectatorNode = CommandManager
                     .literal("spec")
@@ -111,45 +113,73 @@ public class Spekster implements ModInitializer {
         }
     }
 
-    public static void ActivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player) {
-
-        player.changeGameMode(GameMode.SPECTATOR);
-
-        // Spawn in entity
-        Vec2f facing = player.getRotationClient();
-        RegistryKey<World> dimType = player.getServerWorld().getRegistryKey();
-        String BotName = player.getName().asString() + "-SPEC";
-        if (BotName.length() > 11) {
-            BotName = player.getName().asString().substring(0, 8) + "-SPEC";
+    public static void ConfirmPlayer (MinecraftServer server, UUID BotUUID) {
+        SpecDetails Details = Spekster.Tracker.get(Spekster.BotPlayerLink.get(BotUUID));
+        if(isNotNull(Details)) {
+            ServerPlayerEntity thisPlayer = server.getPlayerManager().getPlayer(Details.getPlayerUUID());
+            if(isNull(thisPlayer) || thisPlayer.isDisconnected()) {
+                ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(BotUUID);
+                if(isNotNull(theBot)) {
+                    server.getPlayerManager().remove(theBot);
+                    Spekster.log(Level.INFO, "Removing bot that doesn't have an online player.");
+                    Spekster.Tracker.remove(Details.getPlayerUUID());
+                    Spekster.BotPlayerLink.remove(BotUUID);
+                }
+            }
+        } else {
+            // Its null.. so uh kill this thing. (nicely)
+            ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(BotUUID);
+            if(isNotNull(theBot)) {
+                Spekster.log(Level.INFO, "Removing bot that doesn't have an online player.");
+                theBot.remove(Entity.RemovalReason.DISCARDED);
+                Spekster.BotPlayerLink.remove(BotUUID);
+            }
         }
 
-        PlayerEntity bot = EntityPlayerMPFake.createFake(BotName, server, details.getX(), details.getY(), details.getZ(), facing.y, facing.x, dimType, GameMode.SURVIVAL, false, player.getUuid());
 
-        details.setBotUUID(bot.getUuid());
-        details.setBot(bot);
-        Spekster.Tracker.put(player.getUuid(), details);
-        Spekster.BotPlayerLink.put(bot.getUuid(), player.getUuid());
-
-        player.sendMessage(new LiteralText("You are now in Spectator Mode").formatted(Formatting.BLUE), false);
-        player.sendMessage(new LiteralText("If your clone below takes damage, so will you.").formatted(Formatting.BLUE), false);
-        Spekster.log(Level.INFO, player.getName().asString() + " is now in spectator");
     }
 
-    public static void DeactivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player) {
+    public static void ActivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player) {
+
+        try {
+
+            PlayerEntity bot = EntityPlayerMPFake.createFake(server, details.getX(), details.getY(), details.getZ(), player.getUuid());
+            details.setBotUUID(bot.getUuid());
+            Spekster.Tracker.put(player.getUuid(), details);
+            Spekster.BotPlayerLink.put(bot.getUuid(), player.getUuid());
+
+            player.changeGameMode(GameMode.SPECTATOR);
+            player.sendMessage(new LiteralText("You are now in Spectator Mode").formatted(Formatting.BLUE), false);
+            player.sendMessage(new LiteralText("If your clone below takes damage, so will you.").formatted(Formatting.BLUE), false);
+            Spekster.log(Level.INFO, player.getName().asString() + " is now in spectator");
+
+        } catch (Exception e) {
+            Spekster.log(Level.ERROR, "An error occurred while activating spectator mode.");
+            Spekster.log(Level.ERROR, e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    public static void DeactivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player)  {
         player.teleport(details.getX(), details.getY(), details.getZ());
         player.changeGameMode(GameMode.SURVIVAL);
 
-        Spekster.Tracker.remove(player.getUuid());
-        Spekster.BotPlayerLink.remove(details.getBotUUID());
-        server.getPlayerManager().remove((ServerPlayerEntity)details.getBot());
-        player.sendMessage(new LiteralText("Sending back to Survival mode.").formatted(Formatting.GREEN), false);
-        Spekster.log(Level.INFO, player.getName().asString() + " is now back in survival.");
+        ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(details.getBotUUID());
+        if(isNotNull(theBot)) {
+            player.sendMessage(new LiteralText("Sending back to Survival mode.").formatted(Formatting.GREEN), false);
+            Spekster.log(Level.INFO, player.getName().asString() + " is now back in survival.");
+            server.getPlayerManager().remove(theBot);
+            Spekster.Tracker.remove(player.getUuid());
+            Spekster.BotPlayerLink.remove(details.getBotUUID());
+        } else {
+            Spekster.log(Level.ERROR, "Bot does not exist when it should!");
+        }
     }
 
     public static SkinDetails FetchSkin(UUID uuid) {
         try {
-            String SanatizedUUID = uuid.toString().replace("-", "");
-            String link = "https://sessionserver.mojang.com/session/minecraft/profile/" + SanatizedUUID + "?unsigned=false";
+            String SanitizedUUID = uuid.toString().replace("-", "");
+            String link = "https://sessionserver.mojang.com/session/minecraft/profile/" + SanitizedUUID + "?unsigned=false";
             String jsonS = "";
             URL url = new URL(link);
             URLConnection conn = url.openConnection();

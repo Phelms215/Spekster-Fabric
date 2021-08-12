@@ -15,8 +15,6 @@ public class SpecDetails {
     private double Y;
     private double Z;
 
-    private PlayerEntity botEntity;
-
     public double getX() {
         return X;
     }
@@ -51,11 +49,4 @@ public class SpecDetails {
         return botUUID;
     }
 
-    public void setBot(PlayerEntity newEntity) {
-        botEntity = newEntity;
-    }
-
-    public PlayerEntity getBot() {
-        return botEntity;
-    }
 }

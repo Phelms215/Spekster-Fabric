@@ -4,6 +4,7 @@
   "package": "com.networkglitch.spekster.mixin",
   "compatibilityLevel": "JAVA_16",
   "server": [
+    "PlayerJoinMixin",
     "PlayerLeaveMixin",
     "SpecPlayerDeathMixin",
     "SpecPlayerJoinMixin",
