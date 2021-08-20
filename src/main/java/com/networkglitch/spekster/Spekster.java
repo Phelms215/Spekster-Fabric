@@ -46,8 +46,6 @@ public class Spekster implements ModInitializer {
     public static HashMap<UUID, SpecDetails> Tracker = new HashMap<>();
     public static HashMap<UUID, UUID> BotPlayerLink = new HashMap<>();
 
-
-
     @Override
     public void onInitialize() {
         log(Level.INFO, "Initializing mod, registering commands");
@@ -97,48 +95,6 @@ public class Spekster implements ModInitializer {
         return o == null;
     }
 
-    public static void onBotDeath(UUID botUUID, MinecraftServer server) {
-        if (isNotNull(Spekster.BotPlayerLink.get(botUUID))) {
-            UUID playerUUID = Spekster.BotPlayerLink.get(botUUID);
-            SpecDetails Details = Spekster.Tracker.get(playerUUID);
-            ServerPlayerEntity thisPlayer = server.getPlayerManager().getPlayer(playerUUID);
-            if (isNotNull(thisPlayer)) {
-                thisPlayer.sendMessage(new LiteralText("You died while in spectator mode!").formatted(Formatting.DARK_RED), false);
-                thisPlayer.teleport(Details.getX(), Details.getY(), Details.getZ(), false);
-                thisPlayer.changeGameMode(GameMode.SURVIVAL);
-                thisPlayer.kill();
-                Spekster.BotPlayerLink.remove(Details.getBotUUID());
-                Spekster.Tracker.remove(playerUUID);
-            }
-        }
-    }
-
-    public static void ConfirmPlayer (MinecraftServer server, UUID BotUUID) {
-        SpecDetails Details = Spekster.Tracker.get(Spekster.BotPlayerLink.get(BotUUID));
-        if(isNotNull(Details)) {
-            ServerPlayerEntity thisPlayer = server.getPlayerManager().getPlayer(Details.getPlayerUUID());
-            if(isNull(thisPlayer) || thisPlayer.isDisconnected()) {
-                ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(BotUUID);
-                if(isNotNull(theBot)) {
-                    server.getPlayerManager().remove(theBot);
-                    Spekster.log(Level.INFO, "Removing bot that doesn't have an online player.");
-                    Spekster.Tracker.remove(Details.getPlayerUUID());
-                    Spekster.BotPlayerLink.remove(BotUUID);
-                }
-            }
-        } else {
-            // Its null.. so uh kill this thing. (nicely)
-            ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(BotUUID);
-            if(isNotNull(theBot)) {
-                Spekster.log(Level.INFO, "Removing bot that doesn't have an online player.");
-                theBot.remove(Entity.RemovalReason.DISCARDED);
-                Spekster.BotPlayerLink.remove(BotUUID);
-            }
-        }
-
-
-    }
-
     public static void ActivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player) {
 
         try {
@@ -160,50 +116,39 @@ public class Spekster implements ModInitializer {
         }
     }
 
-    public static void DeactivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player)  {
+    public static void DeactivateSpec(SpecDetails details, MinecraftServer server, ServerPlayerEntity player) {
         player.teleport(details.getX(), details.getY(), details.getZ());
         player.changeGameMode(GameMode.SURVIVAL);
 
         ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(details.getBotUUID());
-        if(isNotNull(theBot)) {
+        if (isNotNull(theBot)) {
             player.sendMessage(new LiteralText("Sending back to Survival mode.").formatted(Formatting.GREEN), false);
             Spekster.log(Level.INFO, player.getName().asString() + " is now back in survival.");
-            server.getPlayerManager().remove(theBot);
             Spekster.Tracker.remove(player.getUuid());
             Spekster.BotPlayerLink.remove(details.getBotUUID());
+            server.getPlayerManager().remove(theBot);
         } else {
             Spekster.log(Level.ERROR, "Bot does not exist when it should!");
         }
     }
 
-    public static SkinDetails FetchSkin(UUID uuid) {
-        try {
-            String SanitizedUUID = uuid.toString().replace("-", "");
-            String link = "https://sessionserver.mojang.com/session/minecraft/profile/" + SanitizedUUID + "?unsigned=false";
-            String jsonS = "";
-            URL url = new URL(link);
-            URLConnection conn = url.openConnection();
-            conn.connect();
-            BufferedReader in = new BufferedReader(new InputStreamReader(
-                    conn.getInputStream()));
-            String inputLine;
-            while ((inputLine = in.readLine()) != null) {
-                jsonS += inputLine;
+    public static void onBotDeath(UUID botUUID, MinecraftServer server) {
+        // Capture the death and kill the dude who caused this mess.
+        ServerPlayerEntity theBot = server.getPlayerManager().getPlayer(botUUID);
+
+        if (Spekster.isNotNull(Spekster.BotPlayerLink.get(botUUID))) {
+            UUID playerUUID = Spekster.BotPlayerLink.get(botUUID);
+            SpecDetails Details = Spekster.Tracker.get(playerUUID);
+            ServerPlayerEntity thisPlayer = server.getPlayerManager().getPlayer(playerUUID);
+            if (Spekster.isNotNull(thisPlayer)) {
+                server.getPlayerManager().remove(theBot);
+                thisPlayer.sendMessage(new LiteralText("You died while in spectator mode!").formatted(Formatting.DARK_RED), false);
+                thisPlayer.teleport(Details.getX(), Details.getY(), Details.getZ(), false);
+                thisPlayer.changeGameMode(GameMode.SURVIVAL);
+                thisPlayer.kill();
+                Spekster.BotPlayerLink.remove(Details.getBotUUID());
+                Spekster.Tracker.remove(playerUUID);
             }
-
-            Gson gson = new Gson();
-            SkinDetails properties = gson.fromJson(jsonS, SkinDetails.class);
-
-            if (isNotNull(properties.getError())) {
-                throw new Exception("Unable to properly retrieve Skin details");
-            }
-            return properties;
-
-        } catch (Exception e) {
-            Spekster.log(Level.ERROR, "An error occurred while retrieving a players skin");
-            Spekster.log(Level.ERROR, e.getMessage());
-            e.printStackTrace();
-            return null;
         }
     }
 }

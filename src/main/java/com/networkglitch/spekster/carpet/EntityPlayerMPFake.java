@@ -10,43 +10,21 @@ package com.networkglitch.spekster.carpet;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.properties.Property;
 import com.networkglitch.spekster.Spekster;
-import com.networkglitch.spekster.datasets.SkinDetails;
 import net.minecraft.block.entity.SkullBlockEntity;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.damage.DamageSource;
-import net.minecraft.entity.player.HungerManager;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
-import net.minecraft.network.MessageType;
 import net.minecraft.network.NetworkSide;
-import net.minecraft.network.packet.s2c.play.DeathMessageS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntityPositionS2CPacket;
-import net.minecraft.network.packet.s2c.play.EntitySetHeadYawS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
-import net.minecraft.scoreboard.AbstractTeam;
-import net.minecraft.scoreboard.ScoreboardCriterion;
-import net.minecraft.scoreboard.ScoreboardPlayerScore;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.ServerTask;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.stat.Stats;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.LiteralText;
-import net.minecraft.text.Text;
-import net.minecraft.text.TranslatableText;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.UserCache;
-import net.minecraft.util.Util;
 import net.minecraft.util.math.Vec2f;
 import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.world.GameMode;
-import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
 import org.apache.logging.log4j.Level;
 
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -54,6 +32,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public class EntityPlayerMPFake extends ServerPlayerEntity
 {
     public Runnable fixStartingPosition = () -> {};
+
+
 
     public static EntityPlayerMPFake createFake(MinecraftServer server, double d0, double d1, double d2, UUID playerUUID) throws Exception {
         ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerUUID);
@@ -76,32 +56,28 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
         yaw = facing.y;
         pitch = facing.x;
 
-        String BotName = player.getName().asString() + "-SPEC";
-        if (BotName.length() > 11) {
+        String BotName;
+        if (player.getName().asString().length() > 7) {
             BotName = player.getName().asString().substring(0, 8) + "-SPEC";
+        } else {
+            BotName = player.getName().asString() + "-SPEC";
         }
         gameprofile = new GameProfile(randomUUID, BotName);
 
 
-        // Grab the skin of the playerUUID and set the clone to, ya know look like them
-        SkinDetails playerSkin = Spekster.FetchSkin(playerUUID);
-        if (Spekster.isNotNull(playerSkin)) {
-            //TODO: Build a static grab for a default texture (config?)
-            gameprofile.getProperties().put("textures", new Property("textures", playerSkin.getProperties().getTexture(), playerSkin.getProperties().getSignature()));
-        }
-
-        if (gameprofile.getProperties().containsKey("textures")) {
-            AtomicReference<GameProfile> result = new AtomicReference<>();
-            SkullBlockEntity.loadProperties(gameprofile, result::set);
-            gameprofile = result.get();
-        }
+        // Get the players skin and clone it.
+        GameProfile playersProfile = player.getGameProfile();
+        Property playerTextures = playersProfile.getProperties().get("textures").iterator().next();
+        gameprofile.getProperties().put("textures", new Property("textures", playerTextures.getValue(), playerTextures.getSignature()));
+        AtomicReference<GameProfile> result = new AtomicReference<>();
+        SkullBlockEntity.loadProperties(gameprofile, result::set);
+        gameprofile = result.get();
 
         EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, gameprofile);
         server.getPlayerManager().onPlayerConnect(new NetworkManagerFake(NetworkSide.SERVERBOUND), instance);
         instance.setHealth(20.0F);
         instance.interactionManager.changeGameMode(GameMode.SURVIVAL);
         instance.teleport(worldIn, d0, d1, d2, (float)yaw, (float)pitch);
-
 
         worldIn.getChunkManager().updatePosition(instance);
         instance.dataTracker.set(PLAYER_MODEL_PARTS, (byte) 0x7f); // show all model layers (incl. capes)
@@ -121,17 +97,12 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     }
 
     @Override
-    public void kill()
-    {
-        kill(Messenger.s("Killed"));
-    }
+    public boolean isPushable() { return false; }
 
-    public void kill(Text reason)
-    {
-        shakeOff();
-        this.server.send(new ServerTask(this.server.getTicks(), () -> {
-            this.networkHandler.onDisconnected(reason);
-        }));
+
+    @Override
+    public void kill()  {
+        Spekster.onBotDeath(this.getUuid(), server);
     }
 
     @Override
@@ -146,9 +117,6 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
             }
             onTeleportationDone(); //<- causes hard crash but would need to be done to enable portals // not as of 1.17
         }
-
-        // Confirm player is active.
-        // Spekster.ConfirmPlayer(server, this.getUuid());
 
         super.tick();
         this.playerTick();
@@ -166,9 +134,7 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
     @Override
     public void onDeath(DamageSource cause)
     {
-        // Capture the death and kill the dude who caused this mess.
-        Spekster.onBotDeath(this.getUuid(), this.getServer());
-        server.getPlayerManager().remove(this);
+        Spekster.onBotDeath(this.getUuid(), server);
     }
 
     @Override
