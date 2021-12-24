@@ -12,6 +12,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.nbt.NbtElement;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.network.MessageType;
@@ -58,6 +59,8 @@ public abstract class SpecPlayerJoinMixin {
     @Final @Shadow private DynamicRegistryManager.Impl registryManager;
     @Shadow protected int maxPlayers;
     @Shadow private int viewDistance;
+
+    @Shadow public abstract MinecraftServer getServer();
 
     public void sendCommandTree(ServerPlayerEntity player) {
         GameProfile gameProfile = player.getGameProfile();
@@ -109,7 +112,7 @@ public abstract class SpecPlayerJoinMixin {
     public NbtCompound loadPlayerData(ServerPlayerEntity player) {
         NbtCompound nbtCompound = this.server.getSaveProperties().getPlayerData();
         NbtCompound nbtCompound3;
-        if (player.getName().getString().equals(this.server.getUserName()) && nbtCompound != null) {
+        if (player.getName().getString().equals(this.server.getSinglePlayerName()) && nbtCompound != null) {
             nbtCompound3 = nbtCompound;
             player.readNbt(nbtCompound);
             LOGGER.debug("loading single player");
@@ -124,7 +127,7 @@ public abstract class SpecPlayerJoinMixin {
         return this.maxPlayers;
     }
 
-    @Inject(at = @At("INVOKE"), method = "onPlayerConnect", cancellable = true)
+    @Inject(at = @At("HEAD"), method = "onPlayerConnect", cancellable = true)
     public void suppressBotMessages(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
 
        if(player instanceof EntityPlayerMPFake) {
@@ -134,6 +137,8 @@ public abstract class SpecPlayerJoinMixin {
             Optional<GameProfile> optional = userCache.getByUuid(gameProfile.getId());
             String string = (String)optional.map(GameProfile::getName).orElse(gameProfile.getName());
             userCache.add(gameProfile);
+
+           /*
             NbtCompound nbtCompound = this.loadPlayerData(player);
             RegistryKey var23;
             if (nbtCompound != null) {
@@ -148,26 +153,47 @@ public abstract class SpecPlayerJoinMixin {
             RegistryKey<World> registryKey = var23;
             ServerWorld serverWorld = this.server.getWorld(registryKey);
             ServerWorld serverWorld3;
-            if (serverWorld == null) {
-                LOGGER.warn("Unknown respawn dimension {}, defaulting to overworld", registryKey);
-                serverWorld3 = this.server.getOverworld();
-            } else {
-                serverWorld3 = serverWorld;
-            }
+            */
 
+           NbtCompound nbtCompound = this.loadPlayerData(player);
+           @SuppressWarnings("deprecation") RegistryKey<World> registryKey = nbtCompound != null ? DimensionType.worldFromDimensionNbt(new Dynamic<NbtElement>(NbtOps.INSTANCE, nbtCompound.get("Dimension"))).resultOrPartial(LOGGER::error).orElse(World.OVERWORLD) : World.OVERWORLD;
+           ServerWorld serverWorld3 = this.server.getWorld(registryKey);
+            if (serverWorld3 == null) {
+                LOGGER.warn("Unknown respawn dimension {}, defaulting to overworld", World.OVERWORLD);
+                serverWorld3 = this.server.getOverworld();
+            }
             player.setWorld(serverWorld3);
+
             String string2 = "local";
             if (connection.getAddress() != null) {
                 string2 = connection.getAddress().toString();
             }
-
             WorldProperties worldProperties = serverWorld3.getLevelProperties();
             player.setGameMode(nbtCompound);
             ServerPlayNetworkHandler serverPlayNetworkHandler = new ServerPlayNetworkHandler(this.server, connection, player);
             GameRules gameRules = serverWorld3.getGameRules();
             boolean bl = gameRules.getBoolean(GameRules.DO_IMMEDIATE_RESPAWN);
             boolean bl2 = gameRules.getBoolean(GameRules.REDUCED_DEBUG_INFO);
-            serverPlayNetworkHandler.sendPacket(new GameJoinS2CPacket(player.getId(), player.interactionManager.getGameMode(), player.interactionManager.getPreviousGameMode(), BiomeAccess.hashSeed(serverWorld3.getSeed()), worldProperties.isHardcore(), this.server.getWorldRegistryKeys(), this.registryManager, serverWorld3.getDimension(), serverWorld3.getRegistryKey(), this.getMaxPlayerCount(), this.viewDistance, bl2, !bl, serverWorld3.isDebugWorld(), serverWorld3.isFlat()));
+
+           serverPlayNetworkHandler.sendPacket(new GameJoinS2CPacket(
+                           player.getId(), // player id
+                           worldProperties.isHardcore(),
+                           player.interactionManager.getPreviousGameMode(), // old game mode
+                           player.interactionManager.getGameMode(), // game mode
+                           this.server.getWorldRegistryKeys(), // world keys
+                           this.registryManager, // registry manager?
+                           serverWorld3.getDimension(),
+                           serverWorld3.getRegistryKey(),
+                           BiomeAccess.hashSeed(serverWorld3.getSeed()),
+                           this.getMaxPlayerCount(),
+                           this.viewDistance,
+                           1, // i
+                           bl2,
+                           !bl,
+                           serverWorld3.isDebugWorld(),
+                           serverWorld3.isFlat()
+                   )
+           );
             serverPlayNetworkHandler.sendPacket(new CustomPayloadS2CPacket(CustomPayloadS2CPacket.BRAND, (new PacketByteBuf(Unpooled.buffer())).writeString(server.getServerModName())));
             serverPlayNetworkHandler.sendPacket(new DifficultyS2CPacket(worldProperties.getDifficulty(), worldProperties.isDifficultyLocked()));
             serverPlayNetworkHandler.sendPacket(new PlayerAbilitiesS2CPacket(player.getAbilities()));
@@ -204,8 +230,9 @@ public abstract class SpecPlayerJoinMixin {
 
             if (nbtCompound != null && nbtCompound.contains("RootVehicle", 10)) {
                 NbtCompound nbtCompound2 = nbtCompound.getCompound("RootVehicle");
+                ServerWorld finalServerWorld = serverWorld3;
                 Entity entity = EntityType.loadEntityWithPassengers(nbtCompound2.getCompound("Entity"), serverWorld3, (vehicle) -> {
-                    return !serverWorld3.tryLoadEntity(vehicle) ? null : vehicle;
+                    return !finalServerWorld.tryLoadEntity(vehicle) ? null : vehicle;
                 });
                 if (entity != null) {
                     UUID uUID2;

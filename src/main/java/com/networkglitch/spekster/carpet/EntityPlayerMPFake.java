@@ -40,8 +40,9 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
         if(Spekster.isNull(player)) {
             throw new Exception("The user does not exist! Cannot clone them.");
         }
-        RegistryKey<World> key = player.getServerWorld().getRegistryKey();
-        ServerWorld worldIn = player.getServerWorld();
+        
+        RegistryKey<World> key = player.getWorld().getRegistryKey();
+        ServerWorld worldIn = player.getWorld();
         if(Spekster.isNull(worldIn)) {
             Spekster.log(Level.ERROR, "World is null, cannot create a fake");
             Spekster.log(Level.ERROR, key.toString());
@@ -112,8 +113,8 @@ public class EntityPlayerMPFake extends ServerPlayerEntity
         if (this.getServer().getTicks() % 10 == 0)
         {
             this.networkHandler.syncWithPlayerPosition();
-            if(Spekster.isNotNull(this.getServerWorld().getChunkManager())) {
-             this.getServerWorld().getChunkManager().updatePosition(this);
+            if(Spekster.isNotNull(this.getWorld().getChunkManager())) {
+             this.getWorld().getChunkManager().updatePosition(this);
             }
             onTeleportationDone(); //<- causes hard crash but would need to be done to enable portals // not as of 1.17
         }

@@ -47,7 +47,7 @@ public abstract class SpecPlayerDeathMixin extends PlayerEntity {
         // If the person died while a spectator suppress the normal message, send ours, and continue with the rest of onDeath
         if (Spekster.isNotNull(Spekster.Tracker.get(this.getUuid()))) {
 
-            this.server.getPlayerManager().broadcastChatMessage(new LiteralText(this.getName().asString() + " died when their clone was killed."), MessageType.SYSTEM, Util.NIL_UUID);
+            this.server.getPlayerManager().broadcast(new LiteralText(this.getName().asString() + " died when their clone was killed."), MessageType.SYSTEM, Util.NIL_UUID);
             this.dropShoulderEntities();
             if (!this.isSpectator()) {
                 this.drop(source);

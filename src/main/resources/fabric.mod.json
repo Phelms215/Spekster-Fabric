@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "spekster",
-  "version": "1.1.0",
+  "version": "1.3",
   "name": "Spekster",
   "description": "Allow controlled spectator mode for any player, while still putting the player at risk",
   "authors": [
@@ -22,8 +22,8 @@
     "spekster.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.11.6",
+    "fabricloader": ">=0.12",
     "fabric": "*",
-    "minecraft": "1.17.1"
+    "minecraft": ">=1.17"
   }
 }
